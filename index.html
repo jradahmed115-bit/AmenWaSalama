@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#12304a">
+<title>HSE Security Interne</title>
+<style>
+body{font-family:Arial,sans-serif;background:#eef2f5;margin:0;color:#172b3a}
+header{background:#12304a;color:white;padding:22px 15px;text-align:center}
+header h1{margin:0;font-size:23px}
+header p{margin:8px 0 0}
+main{padding:15px;max-width:600px;margin:auto}
+.card{background:white;padding:18px;margin:14px 0;border-radius:12px;box-shadow:0 2px 8px #0001}
+h2{font-size:18px;margin-top:0}
+input,button{box-sizing:border-box;width:100%;padding:13px;margin:7px 0;border-radius:8px;font-size:16px}
+input{border:1px solid #bbc7d0}
+button{border:0;background:#1769aa;color:white;font-weight:bold}
+button.green{background:#198754}
+button.red{background:#c0392b}
+.stats{display:flex;gap:10px}
+.stat{flex:1;background:#e4edf5;border-radius:8px;padding:12px;text-align:center}
+.stat strong{display:block;font-size:24px}
+#message{font-weight:bold;line-height:1.5}
+table{width:100%;border-collapse:collapse;font-size:12px}
+td,th{border:1px solid #ccd5dc;padding:7px;text-align:left}
+.tablewrap{overflow-x:auto}
+footer{text-align:center;padding:20px;color:#657786;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+<h1>HSE SECURITY</h1>
+<p>Gestion des sorties – Zone fumeurs</p>
+<p>Sécurité Interne</p>
+</header>
+
+<main>
+<section class="card">
+<h2>👤 Identification du salarié</h2>
+<input id="matricule" placeholder="Numéro matricule du salarié">
+<button onclick="verifier()">Vérifier les autorisations</button>
+<div id="message" aria-live="polite"></div>
+</section>
+
+<section class="card">
+<h2>🚬 Gestion des sorties</h2>
+<div class="stats">
+<div class="stat"><strong id="sorties">0/2</strong>Sorties utilisées</div>
+<div class="stat"><strong>5 min</strong>Durée autorisée</div>
+</div>
+<button class="green" onclick="sortir()">Enregistrer une sortie</button>
+<button class="red" onclick="retour()">Enregistrer le retour</button>
+<p id="etat">Aucune sortie en cours.</p>
+</section>
+
+<section class="card">
+<h2>📋 Historique du jour</h2>
+<div class="tablewrap">
+<table>
+<thead><tr><th>Heure</th><th>Matricule</th><th>Opération</th><th>Détails</th></tr></thead>
+<tbody id="historique"></tbody>
+</table>
+</div>
+<button onclick="exporter()">Exporter le rapport CSV</button>
+<button class="red" onclick="nouvelleJournee()">Nouvelle journée (réinitialiser)</button>
+</section>
+</main>
+
+<footer>HSE Security Interne — Gestion des accès et sorties</footer>
+
+<script>
+const CLE="hse_security_v1";
+let donnees=charger();
+let actif=null;
+
+function dateJour(){
+ return new Date().toLocaleDateString('sv-SE');
+}
+function charger(){
+ try{
+  let d=JSON.parse(localStorage.getItem(CLE));
+  if(!d || d.date!==dateJour()) return {date:dateJour(),logs:[]};
+  return d;
+ }catch(e){return {date:dateJour(),logs:[]};}
+}
+function sauvegarder(){
+ localStorage.setItem(CLE,JSON.stringify(donnees));
+ afficher();
+}
+function matricule(){
+ return document.getElementById("matricule").value.trim();
+}
+function sortiesDuJour(m){
+ return donnees.logs.filter(x=>x.matricule===m && x.operation==="Sortie").length;
+}
+function verifier(){
+ let m=matricule();
+ if(!m){message("Veuillez saisir le matricule.");return;}
+ message("Matricule : "+m+"<br>Sorties utilisées : "+sortiesDuJour(m)+" sur 2.<br>Durée autorisée : 5 minutes par sortie.");
+}
+function message(t){
+ document.getElementById("message").innerHTML=t;
+}
+function enregistrer(m,operation,details=""){
+ donnees.logs.push({
+  date:dateJour(),
+  heure:new Date().toLocaleTimeString('fr-FR'),
+  matricule:m,operation,details
+ });
+ sauvegarder();
+}
+function sortir(){
+ let m=matricule();
+ if(!m){message("Veuillez saisir le matricule.");return;}
+ if(actif){message("Une sortie est déjà en cours pour le matricule "+actif.matricule+".");return;}
+ if(sortiesDuJour(m)>=2){message("Limite atteinte : 2 sorties autorisées par jour.");return;}
+ actif={matricule:m,debut:Date.now()};
+ enregistrer(m,"Sortie","Début de sortie");
+ document.getElementById("etat").textContent="Sortie en cours : "+m;
+ message("Sortie enregistrée. Merci de respecter la durée maximale de 5 minutes.");
+}
+function retour(){
+ let m=matricule();
+ if(!actif){message("Aucune sortie n'est en cours.");return;}
+ if(m && m!==actif.matricule){message("Le matricule ne correspond pas à la sortie en cours.");return;}
+ let duree=Math.round((Date.now()-actif.debut)/1000);
+ let min=Math.floor(duree/60),sec=duree%60;
+ let depasse=duree>300;
+ enregistrer(actif.matricule,"Retour",min+" min "+sec+" sec"+(depasse+""));
+ document.getElementById("etat").textContent="Retour enregistré : "+min+" min "+sec+" sec.";
+ message(depasse?"Attention : durée supérieure à 5 minutes.":"Retour enregistré dans le délai autorisé.");
+ actif=null;
+}
+function afficher(){
+ document.getElementById("historique").innerHTML=donnees.logs.slice().reverse().map(x=>
+ "<tr><td>"+x.heure+"</td><td>"+x.matricule+"</td><td>"+x.operation+"</td><td>"+x.details+"</td></tr>"
+ ).join("");
+ document.getElementById("sorties").textContent=matricule()?sortiesDuJour(matricule())+"/2":"0/2";
+}
+function exporter(){
+ let lignes=[["Date","Heure","Matricule","Opération","Détails"]];
+ donnees.logs.forEach(x=>lignes.push([x.date,x.heure,x.matricule,x.operation,x.details]));
+ let csv=lignes.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(";")).join("\r\n");
+ let blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"});
+ let a=document.createElement("a");
+ a.href=URL.createObjectURL(blob);a.download="rapport_HSE_"+dateJour()+".csv";a.click();
+ URL.revokeObjectURL(a.href);
+}
+function nouvelleJournee(){
+ if(!confirm("Effacer l'historique enregistré sur cet appareil ? Exportez le rapport avant de continuer."))return;
+ donnees={date:dateJour(),logs:[]};actif=null;
+ sauvegarder();
+ document.getElementById("etat").textContent="Aucune sortie en cours.";
+ message("Historique local réinitialisé.");
+}
+document.getElementById("matricule").addEventListener("input",afficher);
+afficher();
+</script>
+</body>
+                                                         </html>
