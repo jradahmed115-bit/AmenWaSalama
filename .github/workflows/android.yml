@@ -1,28 +1,41 @@
-name: Build Android APK
+name: Build HSE Security APK
 
 on:
-workflow_dispatch:
+  workflow_dispatch:
 
 jobs:
-build:
-runs-on: ubuntu-latest
-steps:
-- name: Checkout repository
-uses: actions/checkout@v4
+  build:
+    runs-on: ubuntu-latest
 
-  - name: Prepare build environment
-    run: |
-      sudo apt-get update
-      sudo apt-get install -y nodejs npm zip
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-  - name: Build APK
-    run: |
-      mkdir -p output
-      echo "This project needs Android packaging configuration." > output/README.txt
-      zip -r output/HSE-Security.zip index.html
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
-  - name: Upload build files
-    uses: actions/upload-artifact@v4
-    with:
-      name: HSE-Security
-      path: output/
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Install Cordova
+        run: npm install -g cordova
+
+      - name: Create Android project
+        run: |
+          cordova create hse com.hsesecurity.app "HSE Security"
+          cp index.html hse/www/index.html
+          cd hse
+          cordova platform add android@14.0.1
+          cordova build android --debug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: HSE-Security-APK
+          path: hse/platforms/android/app/build/outputs/apk/debug/app-debug.apk
